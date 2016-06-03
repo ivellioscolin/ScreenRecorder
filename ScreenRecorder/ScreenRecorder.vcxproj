@@ -84,6 +84,7 @@
     <ClInclude Include="DuplicationManager.h" />
     <ClInclude Include="OutputManager.h" />
     <ClInclude Include="PixelShader.h" />
+    <ClInclude Include="resource.h" />
     <ClInclude Include="ThreadManager.h" />
     <ClInclude Include="VertexShader.h" />
   </ItemGroup>
@@ -94,6 +95,9 @@
     <None Include="VertexShader.hlsl">
       <FileType>Document</FileType>
     </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="Resource.rc" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

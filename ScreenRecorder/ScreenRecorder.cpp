@@ -11,6 +11,7 @@
 #include "DuplicationManager.h"
 #include "OutputManager.h"
 #include "ThreadManager.h"
+#include "Resource.h"
 
 //
 // Globals
@@ -211,7 +212,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     Wc.hCursor = Cursor;
     Wc.hbrBackground = nullptr;
     Wc.lpszMenuName = nullptr;
-    Wc.lpszClassName = L"ddasample";
+    Wc.lpszClassName = L"screen_recorder_main";
     Wc.hIconSm = nullptr;
     if (!RegisterClassExW(&Wc))
     {
@@ -219,10 +220,17 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
         return 0;
     }
 
+    // Create dialog
+    HWND hwndDlg;
+    hwndDlg = CreateDialog(hInstance, MAKEINTRESOURCE(DLG_CONTROL), NULL, 0);
+    DWORD err = GetLastError();
+    ShowWindow(hwndDlg, 5);
+    UpdateWindow(hwndDlg);
+
     // Create window
     RECT WindowRect = { 0, 0, 800, 600 };
     AdjustWindowRect(&WindowRect, WS_OVERLAPPEDWINDOW, FALSE);
-    WindowHandle = CreateWindowW(L"ddasample", L"DXGI desktop duplication sample",
+    WindowHandle = CreateWindowW(L"screen_recorder_main", L"Screen Recorder",
         WS_OVERLAPPEDWINDOW,
         0, 0,
         WindowRect.right - WindowRect.left, WindowRect.bottom - WindowRect.top,
