@@ -17,6 +17,7 @@
 // Globals
 //
 OUTPUTMANAGER OutMgr;
+BOOL g_CaptureOneFrame;
 
 // Below are lists of errors expect from Dxgi API calls when a transition event like mode change, PnpStop, PnpStart
 // desktop switch, TDR or session disconnect/reconnect. In all these cases we want the application to clean up the threads that process
@@ -59,6 +60,7 @@ HRESULT EnumOutputsExpectedErrors[] = {
 //
 DWORD WINAPI DDProc(_In_ void* Param);
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
+LRESULT CALLBACK DlgProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 bool ProcessCmdline(_Out_ INT* Output);
 void ShowHelp();
 
@@ -151,6 +153,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     UNREFERENCED_PARAMETER(lpCmdLine);
 
     INT SingleOutput;
+    g_CaptureOneFrame = FALSE;
 
     // Synchronization
     HANDLE UnexpectedErrorEvent = nullptr;
@@ -161,6 +164,9 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     HWND WindowHandle = nullptr;
 
     bool CmdResult = ProcessCmdline(&SingleOutput);
+
+	// Force desktop 0 for debugging
+	SingleOutput = 0;
     if (!CmdResult)
     {
         ShowHelp();
@@ -222,9 +228,9 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 
     // Create dialog
     HWND hwndDlg;
-    hwndDlg = CreateDialog(hInstance, MAKEINTRESOURCE(DLG_CONTROL), NULL, 0);
+    hwndDlg = CreateDialog(hInstance, MAKEINTRESOURCE(DLG_CONTROL), NULL, (DLGPROC)DlgProc);
     DWORD err = GetLastError();
-    ShowWindow(hwndDlg, 5);
+    ShowWindow(hwndDlg, nCmdShow);
     UpdateWindow(hwndDlg);
 
     // Create window
@@ -436,6 +442,27 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     return 0;
 }
 
+LRESULT CALLBACK DlgProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
+{
+    //UNREFERENCED_PARAMETER(lParam);
+    switch (message)
+    {
+        case WM_DESTROY:
+            PostQuitMessage(0);
+            break;
+        case WM_INITDIALOG:
+            return (INT_PTR)TRUE;
+        case WM_COMMAND:
+            if (LOWORD(wParam) == IDC_BUTTON1)
+            {
+                g_CaptureOneFrame = TRUE;
+                return (INT_PTR)TRUE;
+            }
+            break;
+    }
+    return (INT_PTR)FALSE;
+}
+
 //
 // Entry point for new duplication threads
 //
@@ -568,6 +595,36 @@ DWORD WINAPI DDProc(_In_ void* Param)
             KeyMutex->ReleaseSync(1);
             break;
         }
+
+        // Process capture
+        if (g_CaptureOneFrame)
+        {
+            // Only process once until next click
+            g_CaptureOneFrame = FALSE;
+
+            if (DuplMgr.IsDesktopInSystemMemory())
+            {
+                DXGI_MAPPED_RECT sysMap;
+                RtlZeroMemory(&sysMap, sizeof(DXGI_MAPPED_RECT));
+                if(DuplMgr.MapDesktop(&sysMap) == DUPL_RETURN_SUCCESS)
+                {
+                    Ret = DispMgr.ProcessCapture(&CurrentData, SharedSurf, &sysMap);
+                }
+                DuplMgr.UnmapDesktop();
+            }
+            else
+            {
+                Ret = DispMgr.ProcessCapture(&CurrentData, SharedSurf, NULL);
+            }
+
+            if (Ret != DUPL_RETURN_SUCCESS)
+            {
+                DuplMgr.DoneWithFrame();
+                KeyMutex->ReleaseSync(1);
+                break;
+            }
+        }
+
 
         // Release acquired keyed mutex
         hr = KeyMutex->ReleaseSync(1);

@@ -18,6 +18,7 @@ DUPLICATIONMANAGER::DUPLICATIONMANAGER() : m_DeskDupl(nullptr),
                                            m_Device(nullptr)
 {
     RtlZeroMemory(&m_OutputDesc, sizeof(m_OutputDesc));
+    RtlZeroMemory(&m_OutputLDesc, sizeof(m_OutputLDesc));
 }
 
 //
@@ -114,6 +115,8 @@ DUPL_RETURN DUPLICATIONMANAGER::InitDupl(_In_ ID3D11Device* Device, UINT Output)
         }
         return ProcessFailure(m_Device, L"Failed to get duplicate output in DUPLICATIONMANAGER", L"Error", hr, CreateDuplicationExpectedErrors);
     }
+
+    m_DeskDupl->GetDesc(&m_OutputLDesc);
 
     return DUPL_RETURN_SUCCESS;
 }
@@ -317,3 +320,31 @@ void DUPLICATIONMANAGER::GetOutputDesc(_Out_ DXGI_OUTPUT_DESC* DescPtr)
 {
     *DescPtr = m_OutputDesc;
 }
+
+BOOL DUPLICATIONMANAGER::IsDesktopInSystemMemory(void)
+{
+    return m_OutputLDesc.DesktopImageInSystemMemory;
+}
+
+DUPL_RETURN DUPLICATIONMANAGER::MapDesktop(DXGI_MAPPED_RECT *pDesktopMap)
+{
+    DUPL_RETURN Ret = DUPL_RETURN_SUCCESS;
+    HRESULT hr = m_DeskDupl->MapDesktopSurface(pDesktopMap);
+    if (FAILED(hr))
+    {
+        Ret = DUPL_RETURN_ERROR_UNEXPECTED;
+    }
+    return Ret;
+}
+
+DUPL_RETURN DUPLICATIONMANAGER::UnmapDesktop(void)
+{
+    DUPL_RETURN Ret = DUPL_RETURN_SUCCESS;
+    HRESULT hr = m_DeskDupl->UnMapDesktopSurface();
+    if (FAILED(hr))
+    {
+        Ret = DUPL_RETURN_ERROR_UNEXPECTED;
+    }
+    return Ret;
+}
+

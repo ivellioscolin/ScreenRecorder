@@ -23,6 +23,9 @@ class DUPLICATIONMANAGER
         DUPL_RETURN InitDupl(_In_ ID3D11Device* Device, UINT Output);
         DUPL_RETURN GetMouse(_Inout_ PTR_INFO* PtrInfo, _In_ DXGI_OUTDUPL_FRAME_INFO* FrameInfo, INT OffsetX, INT OffsetY);
         void GetOutputDesc(_Out_ DXGI_OUTPUT_DESC* DescPtr);
+        BOOL IsDesktopInSystemMemory(void);
+        DUPL_RETURN MapDesktop(DXGI_MAPPED_RECT *pDesktopMap);
+        DUPL_RETURN UnmapDesktop(void);
 
     private:
 
@@ -33,6 +36,7 @@ class DUPLICATIONMANAGER
         UINT m_MetaDataSize;
         UINT m_OutputNumber;
         DXGI_OUTPUT_DESC m_OutputDesc;
+        DXGI_OUTDUPL_DESC m_OutputLDesc;
         ID3D11Device* m_Device;
 };
 
