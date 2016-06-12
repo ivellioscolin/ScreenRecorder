@@ -21,7 +21,6 @@ class DISPLAYMANAGER
         void InitD3D(DX_RESOURCES* Data);
         ID3D11Device* GetDevice();
         DUPL_RETURN ProcessFrame(_In_ FRAME_DATA* Data, _Inout_ ID3D11Texture2D* SharedSurf, INT OffsetX, INT OffsetY, _In_ DXGI_OUTPUT_DESC* DeskDesc);
-        DUPL_RETURN ProcessCapture(_In_ FRAME_DATA* Data, _In_ ID3D11Texture2D* SharedSurf, DXGI_MAPPED_RECT* pMappedSys);
         void CleanRefs();
 
     private:

@@ -7,6 +7,7 @@
 
 #include <limits.h>
 
+#include "PostProcessor.h"
 #include "DisplayManager.h"
 #include "DuplicationManager.h"
 #include "OutputManager.h"
@@ -471,6 +472,7 @@ DWORD WINAPI DDProc(_In_ void* Param)
     // Classes
     DISPLAYMANAGER DispMgr;
     DUPLICATIONMANAGER DuplMgr;
+    POSTPROCESSOR PostProcessor;
 
     // D3D objects
     ID3D11Texture2D* SharedSurf = nullptr;
@@ -504,6 +506,9 @@ DWORD WINAPI DDProc(_In_ void* Param)
 
     // New display manager
     DispMgr.InitD3D(&TData->DxRes);
+
+    // New post processor
+    PostProcessor.Init(&TData->DxRes);
 
     // Obtain handle to sync shared Surface
     HRESULT hr = TData->DxRes.Device->OpenSharedResource(TData->TexSharedHandle, __uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&SharedSurf));
@@ -608,13 +613,19 @@ DWORD WINAPI DDProc(_In_ void* Param)
                 RtlZeroMemory(&sysMap, sizeof(DXGI_MAPPED_RECT));
                 if(DuplMgr.MapDesktop(&sysMap) == DUPL_RETURN_SUCCESS)
                 {
-                    Ret = DispMgr.ProcessCapture(&CurrentData, SharedSurf, &sysMap);
+                    if (!PostProcessor.ProcessCapture(&CurrentData, SharedSurf, &sysMap))
+                    {
+                        Ret = DUPL_RETURN_ERROR_UNEXPECTED;
+                    }
                 }
                 DuplMgr.UnmapDesktop();
             }
             else
             {
-                Ret = DispMgr.ProcessCapture(&CurrentData, SharedSurf, NULL);
+                if (!PostProcessor.ProcessCapture(&CurrentData, SharedSurf, NULL))
+                {
+                    Ret = DUPL_RETURN_ERROR_UNEXPECTED;
+                }
             }
 
             if (Ret != DUPL_RETURN_SUCCESS)

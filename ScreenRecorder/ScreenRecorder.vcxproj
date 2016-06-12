@@ -75,6 +75,7 @@
     <ClCompile Include="DisplayManager.cpp" />
     <ClCompile Include="DuplicationManager.cpp" />
     <ClCompile Include="OutputManager.cpp" />
+    <ClCompile Include="PostProcessor.cpp" />
     <ClCompile Include="ScreenRecorder.cpp" />
     <ClCompile Include="ThreadManager.cpp" />
   </ItemGroup>
@@ -85,6 +86,7 @@
     <ClInclude Include="DuplicationManager.h" />
     <ClInclude Include="OutputManager.h" />
     <ClInclude Include="PixelShader.h" />
+    <ClInclude Include="PostProcessor.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="ThreadManager.h" />
     <ClInclude Include="VertexShader.h" />
