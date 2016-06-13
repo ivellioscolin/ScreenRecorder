@@ -6,6 +6,10 @@
 // Copyright (c) Microsoft Corporation. All rights reserved
 
 #include "ThreadManager.h"
+#include "PostProcessor.h"
+#include "DuplicationManager.h"
+
+extern POSTPROCESSOR* pPostProcessor;
 
 DWORD WINAPI DDProc(_In_ void* Param);
 
@@ -118,6 +122,7 @@ DUPL_RETURN THREADMANAGER::Initialize(INT SingleOutput, UINT OutputCount, HANDLE
     DUPL_RETURN Ret = DUPL_RETURN_SUCCESS;
     for (UINT i = 0; i < m_ThreadCount; ++i)
     {
+        m_ThreadData[i].InstanceID = i;
         m_ThreadData[i].UnexpectedErrorEvent = UnexpectedErrorEvent;
         m_ThreadData[i].ExpectedErrorEvent = ExpectedErrorEvent;
         m_ThreadData[i].TerminateThreadsEvent = TerminateThreadsEvent;
@@ -133,6 +138,19 @@ DUPL_RETURN THREADMANAGER::Initialize(INT SingleOutput, UINT OutputCount, HANDLE
         {
             return Ret;
         }
+
+        DUPLICATIONMANAGER DuplMgr;
+        Ret = DuplMgr.InitDupl(m_ThreadData[i].DxRes.Device, m_ThreadData[i].Output);
+        if (Ret != DUPL_RETURN_SUCCESS)
+        {
+            return Ret;
+        }
+        // Get output description
+        DXGI_OUTPUT_DESC DesktopDesc;
+        RtlZeroMemory(&DesktopDesc, sizeof(DXGI_OUTPUT_DESC));
+        DuplMgr.GetOutputDesc(&DesktopDesc);
+
+        pPostProcessor[i].Init(i, &m_ThreadData[i].DxRes, &DesktopDesc.DesktopCoordinates);
 
         DWORD ThreadId;
         m_ThreadHandles[i] = CreateThread(nullptr, 0, DDProc, &m_ThreadData[i], 0, &ThreadId);

@@ -17,8 +17,13 @@
 //
 // Globals
 //
+UINT g_OutputCount;
 OUTPUTMANAGER OutMgr;
+POSTPROCESSOR* pPostProcessor;
 BOOL g_CaptureOneFrame;
+BOOL g_Record;
+LONGLONG* g_SampleTime;
+LARGE_INTEGER* g_LastTime;
 
 // Below are lists of errors expect from Dxgi API calls when a transition event like mode change, PnpStop, PnpStart
 // desktop switch, TDR or session disconnect/reconnect. In all these cases we want the application to clean up the threads that process
@@ -154,7 +159,11 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     UNREFERENCED_PARAMETER(lpCmdLine);
 
     INT SingleOutput;
+    pPostProcessor = NULL;
     g_CaptureOneFrame = FALSE;
+    g_Record = FALSE;
+	g_SampleTime = NULL;
+	g_LastTime = NULL;
 
     // Synchronization
     HANDLE UnexpectedErrorEvent = nullptr;
@@ -167,7 +176,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     bool CmdResult = ProcessCmdline(&SingleOutput);
 
 	// Force desktop 0 for debugging
-	SingleOutput = 0;
+	//SingleOutput = 0;
     if (!CmdResult)
     {
         ShowHelp();
@@ -215,12 +224,12 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     Wc.cbClsExtra = 0;
     Wc.cbWndExtra = 0;
     Wc.hInstance = hInstance;
-    Wc.hIcon = nullptr;
+    Wc.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_ICON));
     Wc.hCursor = Cursor;
     Wc.hbrBackground = nullptr;
     Wc.lpszMenuName = nullptr;
     Wc.lpszClassName = L"screen_recorder_main";
-    Wc.hIconSm = nullptr;
+    Wc.hIconSm = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_ICON));
     if (!RegisterClassExW(&Wc))
     {
         ProcessFailure(nullptr, L"Window class registration failed", L"Error", E_UNEXPECTED);
@@ -255,7 +264,6 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 
     THREADMANAGER ThreadMgr;
     RECT DeskBounds;
-    UINT OutputCount;
 
     // Message loop (attempts to update screen when no other messages to process)
     MSG msg = { 0 };
@@ -310,13 +318,16 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
             }
 
             // Re-initialize
-            Ret = OutMgr.InitOutput(WindowHandle, SingleOutput, &OutputCount, &DeskBounds);
+            Ret = OutMgr.InitOutput(WindowHandle, SingleOutput, &g_OutputCount, &DeskBounds);
             if (Ret == DUPL_RETURN_SUCCESS)
             {
+                pPostProcessor = new POSTPROCESSOR[g_OutputCount];
+				g_SampleTime = new LONGLONG[g_OutputCount];
+				g_LastTime = new LARGE_INTEGER[g_OutputCount];
                 HANDLE SharedHandle = OutMgr.GetSharedHandle();
                 if (SharedHandle)
                 {
-                    Ret = ThreadMgr.Initialize(SingleOutput, OutputCount, UnexpectedErrorEvent, ExpectedErrorEvent, TerminateThreadsEvent, SharedHandle, &DeskBounds);
+                    Ret = ThreadMgr.Initialize(SingleOutput, g_OutputCount, UnexpectedErrorEvent, ExpectedErrorEvent, TerminateThreadsEvent, SharedHandle, &DeskBounds);
                 }
                 else
                 {
@@ -363,6 +374,21 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     CloseHandle(UnexpectedErrorEvent);
     CloseHandle(ExpectedErrorEvent);
     CloseHandle(TerminateThreadsEvent);
+
+	if (pPostProcessor)
+	{
+		delete[] pPostProcessor;
+	}
+
+	if (g_SampleTime)
+	{
+		delete[] g_SampleTime;
+	}
+
+	if (g_LastTime)
+	{
+		delete[] g_LastTime;
+	}
 
     if (msg.message == WM_QUIT)
     {
@@ -454,9 +480,39 @@ LRESULT CALLBACK DlgProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         case WM_INITDIALOG:
             return (INT_PTR)TRUE;
         case WM_COMMAND:
-            if (LOWORD(wParam) == IDC_BUTTON1)
+            if (LOWORD(wParam) == IDCANCEL)
+            {
+                PostQuitMessage(0);
+                return (INT_PTR)TRUE;
+            }
+            else if (LOWORD(wParam) == IDC_CAPTURE)
             {
                 g_CaptureOneFrame = TRUE;
+                return (INT_PTR)TRUE;
+            }
+            else if (LOWORD(wParam) == IDC_RECORD)
+            {
+                g_Record = !g_Record;
+                wchar_t *btnCap = NULL;
+                if(g_Record)
+                {
+                    btnCap = L"Stop Record";
+                    for(UINT i = 0;i < g_OutputCount;i++)
+                    {
+                        pPostProcessor[i].StartEncoding();
+                    }
+                }
+                else
+                {
+                    btnCap = L"Start Record";
+                    for (UINT i = 0; i < g_OutputCount; i++)
+                    {
+                        pPostProcessor[i].StopEncoding();
+                    }
+                }
+
+                HWND hwndBtnRecord = GetDlgItem(hWnd, IDC_RECORD);
+                SendMessage(hwndBtnRecord, WM_SETTEXT, (WPARAM)NULL, (LPARAM)btnCap);
                 return (INT_PTR)TRUE;
             }
             break;
@@ -472,7 +528,6 @@ DWORD WINAPI DDProc(_In_ void* Param)
     // Classes
     DISPLAYMANAGER DispMgr;
     DUPLICATIONMANAGER DuplMgr;
-    POSTPROCESSOR PostProcessor;
 
     // D3D objects
     ID3D11Texture2D* SharedSurf = nullptr;
@@ -506,9 +561,6 @@ DWORD WINAPI DDProc(_In_ void* Param)
 
     // New display manager
     DispMgr.InitD3D(&TData->DxRes);
-
-    // New post processor
-    PostProcessor.Init(&TData->DxRes);
 
     // Obtain handle to sync shared Surface
     HRESULT hr = TData->DxRes.Device->OpenSharedResource(TData->TexSharedHandle, __uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&SharedSurf));
@@ -613,7 +665,7 @@ DWORD WINAPI DDProc(_In_ void* Param)
                 RtlZeroMemory(&sysMap, sizeof(DXGI_MAPPED_RECT));
                 if(DuplMgr.MapDesktop(&sysMap) == DUPL_RETURN_SUCCESS)
                 {
-                    if (!PostProcessor.ProcessCapture(&CurrentData, SharedSurf, &sysMap))
+                    if (!pPostProcessor[TData->InstanceID].ProcessCapture(&CurrentData, SharedSurf, &sysMap))
                     {
                         Ret = DUPL_RETURN_ERROR_UNEXPECTED;
                     }
@@ -622,7 +674,7 @@ DWORD WINAPI DDProc(_In_ void* Param)
             }
             else
             {
-                if (!PostProcessor.ProcessCapture(&CurrentData, SharedSurf, NULL))
+                if (!pPostProcessor[TData->InstanceID].ProcessCapture(&CurrentData, SharedSurf, NULL))
                 {
                     Ret = DUPL_RETURN_ERROR_UNEXPECTED;
                 }
@@ -634,6 +686,38 @@ DWORD WINAPI DDProc(_In_ void* Param)
                 KeyMutex->ReleaseSync(1);
                 break;
             }
+        }
+
+        // Process record
+        if (g_Record)
+        {
+			if (DuplMgr.IsDesktopInSystemMemory())
+			{
+				DXGI_MAPPED_RECT sysMap;
+				RtlZeroMemory(&sysMap, sizeof(DXGI_MAPPED_RECT));
+				if (DuplMgr.MapDesktop(&sysMap) == DUPL_RETURN_SUCCESS)
+				{
+					if (!pPostProcessor[TData->InstanceID].ProcessEncoding(&CurrentData, SharedSurf, &sysMap))
+					{
+						Ret = DUPL_RETURN_ERROR_UNEXPECTED;
+					}
+				}
+				DuplMgr.UnmapDesktop();
+			}
+			else
+			{
+				if (!pPostProcessor[TData->InstanceID].ProcessEncoding(&CurrentData, SharedSurf, NULL))
+				{
+					Ret = DUPL_RETURN_ERROR_UNEXPECTED;
+				}
+			}
+
+			if (Ret != DUPL_RETURN_SUCCESS)
+			{
+				DuplMgr.DoneWithFrame();
+				KeyMutex->ReleaseSync(1);
+				break;
+			}
         }
 
 

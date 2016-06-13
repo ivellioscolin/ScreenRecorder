@@ -74,6 +74,9 @@ typedef struct _DX_RESOURCES
 //
 typedef struct _THREAD_DATA
 {
+    // Instance
+    UINT InstanceID;
+
     // Used to indicate abnormal error condition
     HANDLE UnexpectedErrorEvent;
 
