@@ -2,8 +2,6 @@
 #include "PostProcessor.h"
 
 using namespace DirectX;
-extern LONGLONG* g_SampleTime;
-extern LARGE_INTEGER* g_LastTime;
 
 // Format constants
 const UINT32 VIDEO_FPS = 30;
@@ -12,9 +10,13 @@ const GUID   VIDEO_ENCODING_FORMAT = MFVideoFormat_H264;
 //const GUID   VIDEO_ENCODING_FORMAT = MFVideoFormat_HEVC;
 const GUID   VIDEO_INPUT_FORMAT = MFVideoFormat_ARGB32;
 
-POSTPROCESSOR::POSTPROCESSOR() : m_InstanceID(0xFFFFFFFF),
+POSTPROCESSOR::POSTPROCESSOR() : m_CaptureOn(FALSE),
+								 m_RecordOn(FALSE),
+	                             m_InstanceID(0xFFFFFFFF),
                                  m_Width(0),
                                  m_Height(0),
+							     m_FrameCount(0),
+								 m_SampleTime(0),
                                  m_Device(nullptr),
                                  m_DeviceContext(nullptr),
                                  m_pSinkWriter(nullptr),
@@ -24,13 +26,13 @@ POSTPROCESSOR::POSTPROCESSOR() : m_InstanceID(0xFFFFFFFF),
 								 m_pBuffer(nullptr)
 
 {
-    //m_InstanceID = instance;
 }
 
 POSTPROCESSOR::~POSTPROCESSOR()
 {
     m_InstanceID = 0xFFFFFFFF;
     m_MFStarted = FALSE;
+	m_MFReady = FALSE;
     CleanRefs();
 }
 
@@ -135,7 +137,7 @@ BOOL POSTPROCESSOR::ProcessCapture(_In_ FRAME_DATA* Data, _In_ ID3D11Texture2D* 
         outBmp.bitmapinfoheader.biClrImportant = 0;
 
         wchar_t buf[MAX_PATH * 2];
-        ZeroMemory(buf, MAX_PATH * 2 * sizeof(TCHAR));
+        ZeroMemory(buf, MAX_PATH * 2 * sizeof(wchar_t));
         GetCurrentDirectory(MAX_PATH * 2, buf);
 
         swprintf_s(buf, MAX_PATH * 2, L"%s\\Desktop%d_%04d%02d%02d_%02d%02d%02d-%03d.bmp",
@@ -193,7 +195,9 @@ BOOL POSTPROCESSOR::ProcessCapture(_In_ FRAME_DATA* Data, _In_ ID3D11Texture2D* 
 BOOL POSTPROCESSOR::StartEncoding()
 {
     BOOL isSuccess = FALSE;
-	g_SampleTime[m_InstanceID] = 0;
+	m_FrameCount = 0;
+	m_SampleTime = 0;
+	QueryPerformanceCounter(&m_LastTime);
     if (SUCCEEDED(CoInitializeEx(NULL, COINIT_APARTMENTTHREADED)))
     {
         if (SUCCEEDED(MFStartup(MF_VERSION)))
@@ -204,7 +208,7 @@ BOOL POSTPROCESSOR::StartEncoding()
             GetLocalTime(&curTime);
 
             wchar_t buf[MAX_PATH * 2];
-            ZeroMemory(buf, MAX_PATH * 2 * sizeof(TCHAR));
+            ZeroMemory(buf, MAX_PATH * 2 * sizeof(wchar_t));
             GetCurrentDirectory(MAX_PATH * 2, buf);
 
             swprintf_s(buf, MAX_PATH * 2, L"%s\\Desktop%d_%04d%02d%02d_%02d%02d%02d-%03d.mp4",
@@ -341,6 +345,11 @@ BOOL POSTPROCESSOR::ProcessEncoding(_In_ FRAME_DATA* Data, _In_ ID3D11Texture2D*
 	BYTE* pBits = NULL;
 	DWORD pitch = 0;
 
+	if (!IsMFReady())
+	{
+		return isSuccess;
+	}
+
 	D3D11_TEXTURE2D_DESC Desc;
 	Data->Frame->GetDesc(&Desc);
 
@@ -354,13 +363,13 @@ BOOL POSTPROCESSOR::ProcessEncoding(_In_ FRAME_DATA* Data, _In_ ID3D11Texture2D*
 
 	QueryPerformanceFrequency(&Frequency);
 	QueryPerformanceCounter(&CurrentTime);
-	ElapsedMicroseconds.QuadPart = CurrentTime.QuadPart - g_LastTime[m_InstanceID].QuadPart;
+	ElapsedMicroseconds.QuadPart = CurrentTime.QuadPart - m_LastTime.QuadPart;
 	ElapsedMicroseconds.QuadPart *= 1000000;
 	ElapsedMicroseconds.QuadPart /= Frequency.QuadPart;
 
 	Elapsed100Nanoseconds = ElapsedMicroseconds.QuadPart * 10;
 
-	RtlCopyMemory(&g_LastTime[m_InstanceID], &CurrentTime, sizeof(LARGE_INTEGER));
+	RtlCopyMemory(&m_LastTime, &CurrentTime, sizeof(LARGE_INTEGER));
 
 	// Map
 	if (pMappedSys)
@@ -442,7 +451,7 @@ BOOL POSTPROCESSOR::ProcessEncoding(_In_ FRAME_DATA* Data, _In_ ID3D11Texture2D*
 		// Set the time stamp and the duration.
 		if (SUCCEEDED(hr))
 		{
-			hr = pSample->SetSampleTime(g_SampleTime[m_InstanceID]);
+			hr = pSample->SetSampleTime(m_SampleTime);
 		}
 		if (SUCCEEDED(hr))
 		{
@@ -453,7 +462,8 @@ BOOL POSTPROCESSOR::ProcessEncoding(_In_ FRAME_DATA* Data, _In_ ID3D11Texture2D*
 		if (SUCCEEDED(hr))
 		{
 			hr = m_pSinkWriter->WriteSample(m_StreamIndex, pSample);
-			g_SampleTime[m_InstanceID] += Elapsed100Nanoseconds;
+			m_SampleTime += Elapsed100Nanoseconds;
+			m_FrameCount++;
 		}
 
 		SafeRelease(&pSample);
@@ -480,4 +490,9 @@ BOOL POSTPROCESSOR::ProcessEncoding(_In_ FRAME_DATA* Data, _In_ ID3D11Texture2D*
 	}
 
 	return isSuccess;
+}
+
+double POSTPROCESSOR::GetEncodingFPS()
+{
+	return (double)m_FrameCount / ((double)m_SampleTime / 10 / 1000 / 1000);
 }

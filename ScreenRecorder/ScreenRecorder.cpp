@@ -20,10 +20,7 @@
 UINT g_OutputCount;
 OUTPUTMANAGER OutMgr;
 POSTPROCESSOR* pPostProcessor;
-BOOL g_CaptureOneFrame;
 BOOL g_Record;
-LONGLONG* g_SampleTime;
-LARGE_INTEGER* g_LastTime;
 
 // Below are lists of errors expect from Dxgi API calls when a transition event like mode change, PnpStop, PnpStart
 // desktop switch, TDR or session disconnect/reconnect. In all these cases we want the application to clean up the threads that process
@@ -160,10 +157,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 
     INT SingleOutput;
     pPostProcessor = NULL;
-    g_CaptureOneFrame = FALSE;
     g_Record = FALSE;
-	g_SampleTime = NULL;
-	g_LastTime = NULL;
 
     // Synchronization
     HANDLE UnexpectedErrorEvent = nullptr;
@@ -322,8 +316,6 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
             if (Ret == DUPL_RETURN_SUCCESS)
             {
                 pPostProcessor = new POSTPROCESSOR[g_OutputCount];
-				g_SampleTime = new LONGLONG[g_OutputCount];
-				g_LastTime = new LARGE_INTEGER[g_OutputCount];
                 HANDLE SharedHandle = OutMgr.GetSharedHandle();
                 if (SharedHandle)
                 {
@@ -378,16 +370,6 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 	if (pPostProcessor)
 	{
 		delete[] pPostProcessor;
-	}
-
-	if (g_SampleTime)
-	{
-		delete[] g_SampleTime;
-	}
-
-	if (g_LastTime)
-	{
-		delete[] g_LastTime;
 	}
 
     if (msg.message == WM_QUIT)
@@ -487,7 +469,10 @@ LRESULT CALLBACK DlgProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             }
             else if (LOWORD(wParam) == IDC_CAPTURE)
             {
-                g_CaptureOneFrame = TRUE;
+				for (UINT i = 0; i < g_OutputCount; i++)
+				{
+					pPostProcessor[i].EnableCapture();
+				}
                 return (INT_PTR)TRUE;
             }
             else if (LOWORD(wParam) == IDC_RECORD)
@@ -500,15 +485,21 @@ LRESULT CALLBACK DlgProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                     for(UINT i = 0;i < g_OutputCount;i++)
                     {
                         pPostProcessor[i].StartEncoding();
+						pPostProcessor[i].EnableRecording();
                     }
                 }
                 else
                 {
                     btnCap = L"Start Record";
+					wchar_t buf[MAX_PATH];
+					ZeroMemory(buf, MAX_PATH * sizeof(wchar_t));
                     for (UINT i = 0; i < g_OutputCount; i++)
                     {
+						pPostProcessor[i].DisableRecording();
                         pPostProcessor[i].StopEncoding();
+						swprintf_s(buf, MAX_PATH, L"%sStream %d: %.2f\n", buf, i, pPostProcessor[i].GetEncodingFPS());
                     }
+					MessageBox(hWnd, buf, L"Recording FPS", MB_OK);
                 }
 
                 HWND hwndBtnRecord = GetDlgItem(hWnd, IDC_RECORD);
@@ -654,10 +645,10 @@ DWORD WINAPI DDProc(_In_ void* Param)
         }
 
         // Process capture
-        if (g_CaptureOneFrame)
+        if (pPostProcessor[TData->InstanceID].IsCaptureEnabled())
         {
             // Only process once until next click
-            g_CaptureOneFrame = FALSE;
+			pPostProcessor[TData->InstanceID].DisableCapture();
 
             if (DuplMgr.IsDesktopInSystemMemory())
             {
@@ -689,7 +680,7 @@ DWORD WINAPI DDProc(_In_ void* Param)
         }
 
         // Process record
-        if (g_Record)
+        if (pPostProcessor[TData->InstanceID].IsRecordingEnabled())
         {
 			if (DuplMgr.IsDesktopInSystemMemory())
 			{
