@@ -150,7 +150,7 @@ DUPL_RETURN THREADMANAGER::Initialize(INT SingleOutput, UINT OutputCount, HANDLE
         RtlZeroMemory(&DesktopDesc, sizeof(DXGI_OUTPUT_DESC));
         DuplMgr.GetOutputDesc(&DesktopDesc);
 
-        pPostProcessor[i].Init(i, &m_ThreadData[i].DxRes, &DesktopDesc.DesktopCoordinates);
+        pPostProcessor[i].Init(i, &m_ThreadData[i].DxRes, SharedHandle, &DesktopDesc.DesktopCoordinates);
 
         DWORD ThreadId;
         m_ThreadHandles[i] = CreateThread(nullptr, 0, DDProc, &m_ThreadData[i], 0, &ThreadId);

@@ -8,6 +8,7 @@
 #include <mfidl.h>
 #include <Mfreadwrite.h>
 #include <mferror.h>
+#include <Evr.h>
 
 template <class T> void SafeRelease(T **ppT)
 {
@@ -24,7 +25,7 @@ public:
     //POSTPROCESSOR(UINT instance);
     POSTPROCESSOR();
     ~POSTPROCESSOR();
-    void Init(UINT instance, DX_RESOURCES* Data, RECT* pDeskSize);
+    void Init(UINT instance, DX_RESOURCES* Data, HANDLE SharedHandle, RECT* pDeskSize);
     void CleanRefs();
 	BOOL IsCaptureEnabled() { return m_CaptureOn; }
 	void EnableCapture() { m_CaptureOn = TRUE; }
@@ -53,6 +54,7 @@ private:
 	LARGE_INTEGER m_LastTime;
     ID3D11Device* m_Device;
     ID3D11DeviceContext* m_DeviceContext;
+	HANDLE m_TexSharedHandle;
     IMFSinkWriter* m_pSinkWriter;
     DWORD m_StreamIndex;
     BOOL m_MFStarted;

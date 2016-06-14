@@ -4,9 +4,10 @@
 using namespace DirectX;
 
 // Format constants
-const UINT32 VIDEO_FPS = 30;
+const UINT32 VIDEO_FPS = 60;
 const UINT32 VIDEO_BIT_RATE = 800000;
 const GUID   VIDEO_ENCODING_FORMAT = MFVideoFormat_H264;
+//const GUID   VIDEO_ENCODING_FORMAT = MFVideoFormat_ARGB32;
 //const GUID   VIDEO_ENCODING_FORMAT = MFVideoFormat_HEVC;
 const GUID   VIDEO_INPUT_FORMAT = MFVideoFormat_ARGB32;
 
@@ -36,13 +37,14 @@ POSTPROCESSOR::~POSTPROCESSOR()
     CleanRefs();
 }
 
-void POSTPROCESSOR::Init(UINT instance, DX_RESOURCES* Data, RECT* pDeskSize)
+void POSTPROCESSOR::Init(UINT instance, DX_RESOURCES* Data, HANDLE SharedHandle, RECT* pDeskSize)
 {
     m_InstanceID = instance;
     m_Width = (DWORD)abs(pDeskSize->left - pDeskSize->right);
     m_Height = (DWORD)abs(pDeskSize->bottom - pDeskSize->top);
     m_Device = Data->Device;
     m_DeviceContext = Data->Context;
+	m_TexSharedHandle = SharedHandle;
     m_Device->AddRef();
     m_DeviceContext->AddRef();
 }
@@ -303,7 +305,27 @@ BOOL POSTPROCESSOR::StartEncoding()
 			// Create a new memory buffer.
 			if (SUCCEEDED(hr))
 			{
-				hr = MFCreateMemoryBuffer(m_Width * m_Height * 4, &m_pBuffer);
+				//hr = MFCreateMemoryBuffer(m_Width * m_Height * 4, &m_pBuffer);
+				/*
+				ID3D11Texture2D* pDXGITex = nullptr;
+				IDXGISurface2* pDXGISurf = nullptr;
+				UINT uSubresourceIndex = 0;
+
+				hr = m_Device->OpenSharedResource(m_TexSharedHandle, __uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&pDXGITex));
+				pDXGITex->QueryInterface(__uuidof(IDXGISurface2), (reinterpret_cast<void**>(&pDXGISurf)));
+				hr = MFCreateDXGISurfaceBuffer(IID_ID3D11Texture2D, pDXGISurf, uSubresourceIndex, FALSE, &m_pBuffer);
+
+				if (pDXGITex)
+				{
+					pDXGITex->Release();
+					pDXGITex = nullptr;
+				}
+				if (pDXGISurf)
+				{
+					pDXGISurf->Release();
+					pDXGISurf = nullptr;
+				}
+				*/
 			}
 
             // Return the pointer to the caller.
@@ -353,6 +375,7 @@ BOOL POSTPROCESSOR::ProcessEncoding(_In_ FRAME_DATA* Data, _In_ ID3D11Texture2D*
 	D3D11_TEXTURE2D_DESC Desc;
 	Data->Frame->GetDesc(&Desc);
 
+	IDXGISurface2* pDXGISurf = nullptr;
 	IDXGISurface2* pCaptureSurf = nullptr;
 	ID3D11Texture2D* pCaptureTex = nullptr;
 
@@ -397,6 +420,10 @@ BOOL POSTPROCESSOR::ProcessEncoding(_In_ FRAME_DATA* Data, _In_ ID3D11Texture2D*
 			RtlZeroMemory(&rawDesktop, sizeof(DXGI_MAPPED_RECT));
 			pCaptureSurf->Map(&rawDesktop, DXGI_MAP_READ);
 
+			UINT uSubresourceIndex = 0;
+			pCaptureSurf->QueryInterface(__uuidof(IDXGISurface2), (reinterpret_cast<void**>(&pDXGISurf)));
+			hr = MFCreateDXGISurfaceBuffer(IID_ID3D11Texture2D, pDXGISurf, uSubresourceIndex, FALSE, &m_pBuffer);
+
 			pBits = rawDesktop.pBits;
 			pitch = rawDesktop.Pitch;
 		}
@@ -411,8 +438,9 @@ BOOL POSTPROCESSOR::ProcessEncoding(_In_ FRAME_DATA* Data, _In_ ID3D11Texture2D*
 	{
 		IMFSample *pSample = NULL;
 		BYTE *pData = NULL;
-		hr = E_FAIL;
+		hr = S_OK;
 
+		/*
 		if(m_pBuffer)
 		{
 			hr = m_pBuffer->Lock(&pData, NULL, NULL);
@@ -430,6 +458,7 @@ BOOL POSTPROCESSOR::ProcessEncoding(_In_ FRAME_DATA* Data, _In_ ID3D11Texture2D*
 			);
 			m_pBuffer->Unlock();
 		}
+		*/
 
 		// Set the data length of the buffer.
 		if (SUCCEEDED(hr))
@@ -440,7 +469,15 @@ BOOL POSTPROCESSOR::ProcessEncoding(_In_ FRAME_DATA* Data, _In_ ID3D11Texture2D*
 		// Create a media sample and add the buffer to the sample.
 		if (SUCCEEDED(hr))
 		{
-			hr = MFCreateSample(&pSample);
+			//hr = MFCreateSample(&pSample);
+			//ID3D11Texture2D* pDXGITex = nullptr;
+			//IDXGISurface2* pDXGISurf = nullptr;
+			//UINT uSubresourceIndex = 0;
+
+			//hr = m_Device->OpenSharedResource(m_TexSharedHandle, __uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&pDXGITex));
+			//pDXGITex->QueryInterface(__uuidof(IDXGISurface2), (reinterpret_cast<void**>(&pDXGISurf)));
+			//hr = MFCreateVideoSampleFromSurface(pDXGISurf, &pSample);
+			hr = MFCreateVideoSampleFromSurface(NULL, &pSample);
 		}
 
 		if (SUCCEEDED(hr))
@@ -467,6 +504,7 @@ BOOL POSTPROCESSOR::ProcessEncoding(_In_ FRAME_DATA* Data, _In_ ID3D11Texture2D*
 		}
 
 		SafeRelease(&pSample);
+		SafeRelease(&m_pBuffer);
 	}
 
 	// Unmap

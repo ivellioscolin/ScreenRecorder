@@ -170,7 +170,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     bool CmdResult = ProcessCmdline(&SingleOutput);
 
 	// Force desktop 0 for debugging
-	//SingleOutput = 0;
+	SingleOutput = 0;
     if (!CmdResult)
     {
         ShowHelp();
@@ -608,7 +608,7 @@ DWORD WINAPI DDProc(_In_ void* Param)
 
         // We have a new frame so try and process it
         // Try to acquire keyed mutex in order to access shared surface
-        hr = KeyMutex->AcquireSync(0, 1000);
+        hr = KeyMutex->AcquireSync(0, 10000);
         if (hr == static_cast<HRESULT>(WAIT_TIMEOUT))
         {
             // Can't use shared surface right now, try again later
